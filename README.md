@@ -1,5 +1,3 @@
-Here’s a README tailored to the dashboard and repository.
-
 Kettering SDA Church Baptisms Dashboard
 
 A Shiny dashboard for tracking baptisms and professions of faith at Kettering Seventh-day Adventist Church.
@@ -189,5 +187,3 @@ Source Code
 Code and documentation are available at:
 
 https://github.com/jrmilks74/baptisms
-
-The privacy section is worth keeping because the source sheet includes names even though the dashboard itself only displays aggregated totals.
