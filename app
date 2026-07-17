@@ -7,76 +7,26 @@ library(googlesheets4)
 library(plotly)
 library(DT)
 library(bslib)
+library(bbplot)
 
-# ------------------------------------------------------------------------------
-# Configuration
-# ------------------------------------------------------------------------------
+# ---- Google Sheet ----
 
-# Set these values in .Renviron, shinyapps.io environment variables,
-# or another secure deployment configuration.
-#
-# Required:
-#   BAPTISMS_SHEET_URL
-#
-# Optional:
-#   GOOGLE_SERVICE_ACCOUNT_JSON
-#
-# GOOGLE_SERVICE_ACCOUNT_JSON should be the path to a service-account JSON file.
-# Do not commit the JSON file to GitHub.
+options(
+        gargle_oauth_email = TRUE,
+        gargle_oauth_cache = "KetSDA/Data_Science/Baptisms_PoF/.secrets/"
+)
 
-sheet_url <- Sys.getenv("BAPTISMS_SHEET_URL")
-service_account_json <- Sys.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+suppressMessages(gs4_auth(email = "jrmilks@gmail.com"))
 
-if (!nzchar(sheet_url)) {
-        stop(
-                paste(
-                        "The BAPTISMS_SHEET_URL environment variable is not set.",
-                        "Add it to your .Renviron file or deployment settings."
-                ),
-                call. = FALSE
-        )
-}
+sheet_url <- paste0(
+        "https://docs.google.com/spreadsheets/d/",
+        "1R-SLPqHHxkj3p1XaxCNxClGy5u06MQaIP0psctPYFnQ/",
+        "edit?gid=0#gid=0"
+)
 
-# ------------------------------------------------------------------------------
-# Google Sheets authentication
-# ------------------------------------------------------------------------------
+current_year <- year(Sys.Date())
 
-authenticate_google_sheets <- function() {
-        
-        if (
-                nzchar(service_account_json) &&
-                file.exists(service_account_json)
-        ) {
-                gs4_auth(path = service_account_json)
-        } else if (interactive()) {
-                # Local interactive OAuth.
-                gs4_auth()
-        } else {
-                stop(
-                        paste(
-                                "Google Sheets authentication is unavailable.",
-                                "Set GOOGLE_SERVICE_ACCOUNT_JSON to the path",
-                                "of a valid service-account JSON file."
-                        ),
-                        call. = FALSE
-                )
-        }
-}
-
-authenticate_google_sheets()
-
-# Use Eastern Time when determining the current year and download date.
-app_timezone <- "America/New_York"
-
-today_eastern <- function() {
-        as.Date(with_tz(Sys.time(), app_timezone))
-}
-
-current_year <- year(today_eastern())
-
-# ------------------------------------------------------------------------------
-# Data import and cleaning
-# ------------------------------------------------------------------------------
+# ---- Read and clean data ----
 
 read_baptism_data <- function() {
         
@@ -84,8 +34,7 @@ read_baptism_data <- function() {
                 ss = sheet_url,
                 sheet = 1,
                 range = "A:D",
-                col_types = "cccc",
-                na = c("", "NA")
+                col_types = "cccc"
         ) %>%
                 rename(
                         Year = 1,
@@ -99,28 +48,21 @@ read_baptism_data <- function() {
                         Name = str_squish(as.character(Name)),
                         Type = str_squish(as.character(Type)),
                         Type = case_when(
-                                str_detect(
-                                        str_to_lower(Type),
-                                        "bapt"
-                                ) ~ "Baptism",
-                                str_detect(
-                                        str_to_lower(Type),
-                                        "profession"
-                                ) ~ "Profession of Faith",
+                                str_detect(str_to_lower(Type), "bapt") ~
+                                        "Baptism",
+                                str_detect(str_to_lower(Type), "profession") ~
+                                        "Profession of Faith",
                                 TRUE ~ NA_character_
                         )
                 ) %>%
                 filter(
                         !is.na(Year),
                         !is.na(Name),
-                        Name != "",
                         !is.na(Type)
                 )
 }
 
-# ------------------------------------------------------------------------------
-# User interface
-# ------------------------------------------------------------------------------
+# ---- UI ----
 
 ui <- page_fluid(
         
@@ -130,66 +72,48 @@ ui <- page_fluid(
         ),
         
         tags$head(
-                tags$meta(
-                        name = "viewport",
-                        content = paste(
-                                "width=device-width,",
-                                "initial-scale=1"
-                        )
-                ),
-                
-                tags$style(
-                        HTML("
-                                .main-title {
-                                        text-align: center;
-                                        margin-top: 30px;
-                                        margin-bottom: 5px;
-                                        font-weight: 700;
-                                }
+                tags$style(HTML("
+      .main-title {
+        text-align: center;
+        margin-top: 30px;
+        margin-bottom: 5px;
+        font-weight: 700;
+      }
 
-                                .subtitle {
-                                        text-align: center;
-                                        margin-top: 0;
-                                        margin-bottom: 30px;
-                                        font-weight: 400;
-                                }
+      .subtitle {
+        text-align: center;
+        margin-top: 0;
+        margin-bottom: 30px;
+        font-weight: 400;
+      }
 
-                                .card {
-                                        margin-bottom: 25px;
-                                }
+      .card {
+        margin-bottom: 25px;
+      }
 
-                                .dataTables_wrapper {
-                                        font-size: 18px;
-                                }
+      .dataTables_wrapper {
+        font-size: 18px;
+      }
 
-                                table.dataTable tbody td {
-                                        padding: 12px;
-                                }
+      table.dataTable tbody td {
+        padding: 12px;
+      }
 
-                                .graph-download {
-                                        margin-top: 10px;
-                                        margin-bottom: 5px;
-                                        text-align: right;
-                                }
+      .graph-download {
+        margin-top: 10px;
+        margin-bottom: 5px;
+        text-align: right;
+      }
 
-                                .app-footer {
-                                        margin-top: 20px;
-                                        margin-bottom: 35px;
-                                        font-size: 15px;
-                                }
-
-                                .app-footer a {
-                                        overflow-wrap: anywhere;
-                                }
-                        ")
-                )
+      .app-footer {
+        margin-top: 20px;
+        margin-bottom: 35px;
+        font-size: 15px;
+      }
+    "))
         ),
         
-        h1(
-                "Kettering SDA Church",
-                class = "main-title"
-        ),
-        
+        h1("Kettering SDA Church", class = "main-title"),
         h3(
                 "Baptisms and Professions of Faith",
                 class = "subtitle"
@@ -200,36 +124,25 @@ ui <- page_fluid(
                 
                 card(
                         card_header(
-                                paste(
-                                        current_year,
-                                        "Year-to-Date Summary"
-                                )
+                                paste(current_year, "Year-to-Date Summary")
                         ),
-                        
-                        card_body(
-                                DTOutput("current_year_table")
-                        )
+                        DTOutput("current_year_table")
                 ),
                 
                 card(
                         card_header(
                                 "Baptisms and Professions of Faith"
                         ),
-                        
-                        card_body(
-                                plotlyOutput(
-                                        "stacked_bar",
-                                        height = "500px"
-                                ),
-                                
-                                div(
-                                        class = "graph-download",
-                                        
-                                        downloadButton(
-                                                outputId = "download_graph",
-                                                label = "Download Graph",
-                                                class = "btn-primary"
-                                        )
+                        plotlyOutput(
+                                "stacked_bar",
+                                height = "500px"
+                        ),
+                        div(
+                                class = "graph-download",
+                                downloadButton(
+                                        outputId = "download_graph",
+                                        label = "Download Graph",
+                                        class = "btn-primary"
                                 )
                         )
                 )
@@ -237,19 +150,11 @@ ui <- page_fluid(
         
         div(
                 class = "app-footer",
-                
                 hr(),
-                
                 h4("Created by: Jim Milks"),
-                
-                "Version 1",
-                br(),
-                
-                "Updated 10 July 2026",
-                br(),
-                
-                "Code and data available at: ",
-                
+                "Version 1", br(),
+                "Updated 10 July 2026", br(),
+                "Code and data available at:",
                 tags$a(
                         href = paste0(
                                 "https://github.com/",
@@ -257,92 +162,41 @@ ui <- page_fluid(
                         ),
                         target = "_blank",
                         rel = "noopener noreferrer",
-                        paste0(
-                                "https://github.com/",
-                                "jrmilks74/baptisms"
-                        )
+                        "https://github.com/jrmilks74/baptisms"
                 )
         )
 )
 
-# ------------------------------------------------------------------------------
-# Server
-# ------------------------------------------------------------------------------
+# ---- Server ----
 
 server <- function(input, output, session) {
         
         baptism_data <- reactive({
-                
-                tryCatch(
-                        read_baptism_data(),
-                        error = function(error) {
-                                showNotification(
-                                        paste(
-                                                "The baptism data could not",
-                                                "be loaded:",
-                                                error$message
-                                        ),
-                                        type = "error",
-                                        duration = NULL
-                                )
-                                
-                                tibble(
-                                        Year = integer(),
-                                        Month = character(),
-                                        Name = character(),
-                                        Type = character()
-                                )
-                        }
-                )
+                read_baptism_data()
         })
         
         current_year_summary <- reactive({
                 
-                data <- baptism_data()
-                
-                tibble(
-                        Category = c(
-                                "Baptisms",
-                                "Professions of Faith",
-                                "Total"
-                        ),
-                        Count = c(
-                                sum(
-                                        data$Year == current_year &
-                                                data$Type == "Baptism",
-                                        na.rm = TRUE
-                                ),
-                                sum(
-                                        data$Year == current_year &
-                                                data$Type ==
-                                                "Profession of Faith",
-                                        na.rm = TRUE
-                                ),
-                                sum(
-                                        data$Year == current_year,
-                                        na.rm = TRUE
-                                )
+                baptism_data() %>%
+                        filter(Year == current_year) %>%
+                        summarise(
+                                Baptisms = sum(Type == "Baptism"),
+                                `Professions of Faith` =
+                                        sum(Type == "Profession of Faith"),
+                                Total = n(),
+                                .groups = "drop"
+                        ) %>%
+                        pivot_longer(
+                                cols = everything(),
+                                names_to = "Category",
+                                values_to = "Count"
                         )
-                )
         })
         
         yearly_summary <- reactive({
                 
-                data <- baptism_data()
-                
-                validate(
-                        need(
-                                nrow(data) > 0,
-                                "No baptism or profession-of-faith records are available."
-                        )
-                )
-                
-                data %>%
-                        count(
-                                Year,
-                                Type,
-                                name = "Count"
-                        ) %>%
+                baptism_data() %>%
+                        count(Year, Type, name = "Count") %>%
                         complete(
                                 Year,
                                 Type = c(
@@ -367,30 +221,28 @@ server <- function(input, output, session) {
                         ungroup()
         })
         
+        # One ggplot object is used for both the interactive chart
+        # and the downloaded PNG.
         stacked_bar_plot <- reactive({
                 
-                chart_data <- yearly_summary()
-                
-                ggplot(
-                        chart_data,
-                        aes(
-                                x = factor(Year),
-                                y = Count,
-                                fill = Type,
-                                text = paste0(
-                                        "Year: ",
-                                        Year,
-                                        "<br>Category: ",
-                                        Type,
-                                        "<br>Count: ",
-                                        Count,
-                                        "<br>Year total: ",
-                                        Year_Total
+                yearly_summary() %>%
+                        ggplot(
+                                aes(
+                                        x = factor(Year),
+                                        y = Count,
+                                        fill = Type,
+                                        text = paste0(
+                                                "Year: ", Year,
+                                                "<br>Category: ", Type,
+                                                "<br>Count: ", Count,
+                                                "<br>Year total: ",
+                                                Year_Total
+                                        )
                                 )
-                        )
-                ) +
+                        ) +
                         geom_col(width = 0.7) +
                         labs(
+                                title = "Baptisms and Professions of Faith",
                                 x = "Year",
                                 y = "Total",
                                 fill = NULL
@@ -403,16 +255,9 @@ server <- function(input, output, session) {
                                 breaks = c(
                                         "Baptism",
                                         "Profession of Faith"
-                                ),
-                                drop = FALSE
+                                )
                         ) +
-                        theme_minimal(base_size = 15) +
-                        theme(
-                                axis.title = element_text(size = 14),
-                                axis.text = element_text(size = 13),
-                                legend.position = "bottom",
-                                panel.grid.minor = element_blank()
-                        )
+                        bbc_style()
         })
         
         output$current_year_table <- renderDT({
@@ -420,10 +265,7 @@ server <- function(input, output, session) {
                 datatable(
                         current_year_summary(),
                         rownames = FALSE,
-                        colnames = c(
-                                "Category",
-                                "Count"
-                        ),
+                        colnames = c("Category", "Count"),
                         options = list(
                                 dom = "t",
                                 ordering = FALSE,
@@ -460,13 +302,9 @@ server <- function(input, output, session) {
                                 margin = list(
                                         l = 60,
                                         r = 30,
-                                        t = 30,
+                                        t = 70,
                                         b = 120
                                 )
-                        ) %>%
-                        config(
-                                displaylogo = FALSE,
-                                responsive = TRUE
                         )
         })
         
@@ -475,7 +313,7 @@ server <- function(input, output, session) {
                 filename = function() {
                         paste0(
                                 "kettering-baptisms-professions-of-faith-",
-                                today_eastern(),
+                                Sys.Date(),
                                 ".png"
                         )
                 },
